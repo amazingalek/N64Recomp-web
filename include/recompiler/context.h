@@ -608,6 +608,10 @@ namespace N64Recomp {
 
     ModSymbolsError parse_mod_symbols(std::span<const char> data, std::span<const uint8_t> binary, const std::unordered_map<uint32_t, uint16_t>& sections_by_vrom, Context& context_out);
     std::vector<uint8_t> symbols_to_bin_v1(const Context& mod_context);
+    // Identifies a mod's code: FNV-1a 64 of its mod_binary.bin and then its mod_syms.bin. A mod recompiled ahead of
+    // time (OfflineModRecomp --static) carries the hash of the files it was made from, and the runtime uses that code
+    // only for a mod whose files hash the same.
+    uint64_t mod_code_hash(std::span<const uint8_t> binary, std::span<const char> syms);
     
     inline bool is_manual_patch_symbol(uint32_t vram) {
         // Zero-sized symbols between 0x8F000000 and 0x90000000 are manually specified symbols for use with patches.

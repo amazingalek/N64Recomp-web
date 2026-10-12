@@ -2,6 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <span>
+#include <cstring>
 
 #include "recompiler/context.h"
 #include "rabbitizer.hpp"
@@ -25,8 +26,16 @@ static std::vector<uint8_t> read_file(const std::filesystem::path& path, bool& f
 }
 
 int main(int argc, const char** argv) {
-    if (argc != 5) {
-        printf("Usage: %s [mod symbol file] [mod binary file] [recomp symbols file] [output C file]\n", argv[0]);
+    // With --static <name>, the output is for linking into the recomp's executable instead of a DLL: for a platform
+    // without the live recompiler (WebAssembly), where the mod can only run as code compiled with the recomp. It
+    // includes recomp.h, keeps everything file-local but `const recomp_precompiled_mod <name>`, which the recomp
+    // registers with the runtime (recomp::mods::register_precompiled_mod), and calls the runtime's functions directly.
+    const char* static_name = nullptr;
+    if (argc == 7 && strcmp(argv[5], "--static") == 0) {
+        static_name = argv[6];
+    }
+    else if (argc != 5) {
+        printf("Usage: %s [mod symbol file] [mod binary file] [recomp symbols file] [output C file] [--static <name>]\n", argv[0]);
         return EXIT_SUCCESS;
     }
     bool found;
@@ -43,6 +52,7 @@ int main(int argc, const char** argv) {
     }
 
     std::span<const char> symbol_data_span { reinterpret_cast<const char*>(symbol_data.data()), symbol_data.size() };
+    uint64_t code_hash = N64Recomp::mod_code_hash(rom_data, symbol_data_span);
 
     std::vector<uint8_t> dummy_rom{};
     N64Recomp::Context reference_context{};
@@ -127,10 +137,21 @@ int main(int argc, const char** argv) {
     RabbitizerConfig_Cfg.pseudos.pseudoNot = false;
     RabbitizerConfig_Cfg.pseudos.pseudoBal = false;
 
-    output_file << "#include \"mod_recomp.h\"\n\n";
+    const char* storage = static_name ? "static" : "RECOMP_EXPORT";
+    if (static_name) {
+        output_file << "#include \"recomp.h\"\n\n";
+        output_file << "#undef RECOMP_FUNC\n#define RECOMP_FUNC static\n\n";
+        output_file << "void recomp_trigger_event(uint8_t* rdram, recomp_context* ctx, uint32_t event_index);\n\n";
+    }
+    else {
+        output_file << "#include \"mod_recomp.h\"\n\n";
 
-    // Write the API version.
-    output_file << "RECOMP_EXPORT uint32_t recomp_api_version = 1;\n\n";
+        // Write the API version.
+        output_file << "RECOMP_EXPORT uint32_t recomp_api_version = 1;\n\n";
+    }
+
+    // A mod's own functions are never replaced or hooked through RECOMP_FUNC_ENTRY (recomp.h).
+    output_file << "#undef RECOMP_FUNC_ENTRY\n#define RECOMP_FUNC_ENTRY(func)\n\n";
 
     output_file << "// Values populated by the runtime:\n\n";
 
@@ -142,7 +163,7 @@ int main(int argc, const char** argv) {
         output_file << "#define " << import.base.name << " imported_funcs[" << import_index << "]\n";
     }
 
-    output_file << "RECOMP_EXPORT recomp_func_t* imported_funcs[" << std::max(size_t{1}, num_imports) << "] = {0};\n";
+    output_file << storage << " recomp_func_t* imported_funcs[" << std::max(size_t{1}, num_imports) << "] = {0};\n";
     output_file << "\n";
 
     // Use reloc list to write reference symbol function pointer array and defines (i.e. `#define func_80102468 reference_symbol_funcs[0]`)
@@ -165,12 +186,14 @@ int main(int argc, const char** argv) {
         }
     }
     // C doesn't allow 0-sized arrays, so always add at least one member to all arrays. The actual size will be pulled from the mod symbols.
-    output_file << "RECOMP_EXPORT recomp_func_t* reference_symbol_funcs[" << std::max(size_t{1},num_reference_symbols) << "] = {0};\n\n";
+    output_file << storage << " recomp_func_t* reference_symbol_funcs[" << std::max(size_t{1},num_reference_symbols) << "] = {0};\n\n";
 
     // Write provided event array (maps internal event indices to global ones).
     output_file << "// Base global event index for this mod's events.\n";
-    output_file << "RECOMP_EXPORT uint32_t base_event_index;\n\n";
+    output_file << storage << " uint32_t base_event_index;\n\n";
 
+    // The static form calls the runtime's own functions, which a DLL is given pointers to.
+    if (!static_name) {
     // Write the event trigger function pointer.
     output_file << "// Pointer to the runtime function for triggering events.\n";
     output_file << "RECOMP_EXPORT void (*recomp_trigger_event)(uint8_t* rdram, recomp_context* ctx, uint32_t) = NULL;\n\n";
@@ -194,15 +217,27 @@ int main(int argc, const char** argv) {
     // Write the do_break pointer.
     output_file << "// Pointer to the runtime function for handling the break instruction.\n";
     output_file << "RECOMP_EXPORT void (*do_break)(uint32_t vram) = NULL;\n\n";
+    }
 
     // Write the section_addresses pointer.
     output_file << "// Pointer to the runtime's array of loaded section addresses for the base ROM.\n";
-    output_file << "RECOMP_EXPORT int32_t* reference_section_addresses = NULL;\n\n";
+    output_file << storage << " int32_t* reference_section_addresses = NULL;\n\n";
+    if (static_name) {
+        output_file << "#define REF_RELOC_HI16(section_index, offset) HI16(reference_section_addresses[section_index] + (offset))\n";
+        output_file << "#define REF_RELOC_LO16(section_index, offset) LO16(reference_section_addresses[section_index] + (offset))\n\n";
+    }
 
     // Write the local section addresses pointer array.
     size_t num_sections = mod_context.sections.size();
     output_file << "// Array of this mod's loaded section addresses.\n";
-    output_file << "RECOMP_EXPORT int32_t section_addresses[" << std::max(size_t{1}, num_sections) << "] = {0};\n\n";
+    if (static_name) {
+        // recomp.h's section_addresses are the base ROM's, and RELOC_HI16/LO16 name them.
+        output_file << "static int32_t mod_section_addresses[" << std::max(size_t{1}, num_sections) << "] = {0};\n";
+        output_file << "#define section_addresses mod_section_addresses\n\n";
+    }
+    else {
+        output_file << "RECOMP_EXPORT int32_t section_addresses[" << std::max(size_t{1}, num_sections) << "] = {0};\n\n";
+    }
 
     // Create a set of the export indices to avoid renaming them.
     std::unordered_set<size_t> export_indices{mod_context.exported_funcs.begin(), mod_context.exported_funcs.end()};
@@ -227,6 +262,25 @@ int main(int argc, const char** argv) {
             std::filesystem::remove(output_file_path, ec);
             return EXIT_FAILURE;
         }
+    }
+
+    if (static_name) {
+        output_file << "static recomp_func_t* const functions[" << std::max(size_t{1}, mod_context.functions.size()) << "] = {\n";
+        for (const auto& func : mod_context.functions) {
+            output_file << "    " << func.name << ",\n";
+        }
+        output_file << "};\n\n";
+        output_file << "#undef section_addresses\n";
+        output_file << "const recomp_precompiled_mod " << static_name << " = {\n";
+        output_file << "    .hash = 0x" << std::hex << code_hash << std::dec << "ULL,\n";
+        output_file << "    .num_functions = " << mod_context.functions.size() << ",\n";
+        output_file << "    .functions = functions,\n";
+        output_file << "    .imported_funcs = imported_funcs,\n";
+        output_file << "    .reference_symbol_funcs = reference_symbol_funcs,\n";
+        output_file << "    .base_event_index = &base_event_index,\n";
+        output_file << "    .reference_section_addresses = &reference_section_addresses,\n";
+        output_file << "    .section_addresses = mod_section_addresses,\n";
+        output_file << "};\n";
     }
 
 	return EXIT_SUCCESS;

@@ -829,3 +829,14 @@ std::vector<uint8_t> N64Recomp::symbols_to_bin_v1(const N64Recomp::Context& cont
 
     return ret;
 }
+
+uint64_t N64Recomp::mod_code_hash(std::span<const uint8_t> binary, std::span<const char> syms) {
+    uint64_t hash = 0xCBF29CE484222325ULL;
+    for (uint8_t byte : binary) {
+        hash = (hash ^ byte) * 0x100000001B3ULL;
+    }
+    for (char byte : syms) {
+        hash = (hash ^ static_cast<uint8_t>(byte)) * 0x100000001B3ULL;
+    }
+    return hash;
+}

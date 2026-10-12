@@ -398,8 +398,10 @@ void N64Recomp::CGenerator::emit_function_start(const std::string& function_name
         "RECOMP_FUNC void {}(uint8_t* rdram, recomp_context* ctx) {{\n"
         // these variables shouldn't need to be preserved across function boundaries, so make them local for more efficient output
         "    uint64_t hi = 0, lo = 0, result = 0;\n"
-        "    int c1cs = 0;\n", // cop1 conditional signal
-        function_name);
+        "    int c1cs = 0;\n" // cop1 conditional signal
+        // where a mod's replacement or hooks of this function run in WebAssembly, which can't rewrite its code (recomp.h)
+        "    RECOMP_FUNC_ENTRY({})\n",
+        function_name, function_name);
 }
 
 void N64Recomp::CGenerator::emit_function_end() const {

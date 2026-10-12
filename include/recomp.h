@@ -522,6 +522,46 @@ void recomp_syscall_handler(uint8_t* rdram, recomp_context* ctx, int32_t instruc
 
 void pause_self(uint8_t *rdram);
 
+#if defined(__wasm__)
+// A mod replaces or hooks a recompiled function by rewriting its machine code (N64ModernRuntime's patch_func), which
+// WebAssembly can't do, so there every recompiled function asks at its entry instead. A function pointer is an index
+// into the function table, and recomp_redirected has a byte for each index below recomp_redirected_count, set for a
+// function a mod replaces or hooks; recomp_redirect then runs the replacement or the hooks around the function and
+// returns nonzero, or returns 0 when the function is to run itself (as it is called from those hooks). Without mods
+// the count is 0, and the check is one comparison.
+extern const uint8_t* recomp_redirected;
+extern uintptr_t recomp_redirected_count;
+int recomp_redirect(uint8_t* rdram, recomp_context* ctx, uintptr_t func);
+// A function's table index, hidden from the optimizer: clang (24) folds a function's address used as an array index
+// into the load's offset, and the linker fills that in with the function's index in the module, not its table index.
+static inline uintptr_t recomp_table_index(uintptr_t func) {
+    __asm__("" : "+r"(func));
+    return func;
+}
+#define RECOMP_FUNC_ENTRY(func) \
+    { \
+        uintptr_t recomp_entry_index = recomp_table_index((uintptr_t)&func); \
+        if (recomp_entry_index < recomp_redirected_count && recomp_redirected[recomp_entry_index] && \
+            recomp_redirect(rdram, ctx, recomp_entry_index)) return; \
+    }
+#else
+#define RECOMP_FUNC_ENTRY(func)
+#endif
+
+// A mod's code recompiled ahead of time into C (OfflineModRecomp --static) and linked into the executable, for a
+// platform without the live recompiler (WebAssembly). The runtime uses it, through the pointers here, for a mod whose
+// mod_binary.bin and mod_syms.bin hash to `hash` (N64Recomp::mod_code_hash), in place of recompiling the mod.
+typedef struct {
+    uint64_t hash;
+    size_t num_functions;
+    recomp_func_t* const* functions;      // in the order of the mod's symbol file
+    recomp_func_t** imported_funcs;
+    recomp_func_t** reference_symbol_funcs;
+    uint32_t* base_event_index;
+    int32_t** reference_section_addresses;
+    int32_t* section_addresses;           // the mod's own
+} recomp_precompiled_mod;
+
 #ifdef __cplusplus
 }
 #endif
