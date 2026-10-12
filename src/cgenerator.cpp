@@ -419,8 +419,15 @@ void N64Recomp::CGenerator::emit_function_call_by_register(int reg) const {
 void N64Recomp::CGenerator::emit_function_call_reference_symbol(const Context& context, uint16_t section_index, size_t symbol_index, uint32_t target_section_offset) const {
     (void)target_section_offset;
     const N64Recomp::ReferenceSymbol& sym = context.get_reference_symbol(section_index, symbol_index);
-    context.called_functions.insert(sym.name);
-    fmt::print(output_file, "{}(rdram, ctx);\n", sym.name);
+    // The base game's own calls to a function the runtime reimplements, or that the recompiler ignores or renames, go to
+    // <name>_recomp (main.cpp renames them), so a patch's call to it through its reference symbol does too. By its bare
+    // name it reached libultra's native function instead (osInitialize(void) for osInitialize), which works on x86 by
+    // luck and is a signature mismatch in WebAssembly: an error once funcs.h declares it, a trap at run time without.
+    const bool renamed = N64Recomp::reimplemented_funcs.contains(sym.name) || N64Recomp::ignored_funcs.contains(sym.name) ||
+        N64Recomp::renamed_funcs.contains(sym.name);
+    const std::string name = renamed ? sym.name + "_recomp" : sym.name;
+    context.called_functions.insert(name);
+    fmt::print(output_file, "{}(rdram, ctx);\n", name);
 }
 
 void N64Recomp::CGenerator::emit_function_call(const Context& context, size_t function_index) const {
