@@ -1,4 +1,12 @@
 # N64: Recompiled
+
+> [!WARNING]
+> **This is amazingalek/N64Recomp-web, a fork, not [N64: Recompiled](https://github.com/N64Recomp/N64Recomp).** It
+> changes the recompiler's output so that the C it generates builds and runs as WebAssembly, for
+> [recomp-web](https://github.com/amazingalek/recomp-web), and everything in it past upstream's commits was written by
+> AI (Claude). It is not made, endorsed or supported by the N64: Recompiled developers, whose contributing guide bans
+> AI-written code: nothing here is offered upstream, and please don't take issues with this fork to them.
+
 N64: Recompiled is a tool to statically recompile N64 binaries into C code that can be compiled for any platform. This can be used for ports or tools as well as for simulating behaviors significantly faster than interpreters or dynamic recompilation can. More widely, it can be used in any context where you want to run some part of an N64 binary in a standalone environment.
 
 This is not the first project that uses static recompilation on game console binaries. A well known example is [jamulator](https://github.com/andrewrk/jamulator), which targets NES binaries. Additionally, this is not even the first project to apply static recompilation to N64-related projects: the [IDO static recompilation](https://github.com/decompals/ido-static-recomp) recompiles the SGI IRIX IDO compiler on modern systems to faciliate matching decompilation of N64 games. This project works similarly to the IDO static recomp project in some ways, and that project was my main inspiration for making this.
