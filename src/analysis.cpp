@@ -314,14 +314,33 @@ bool N64Recomp::analyze_function(const N64Recomp::Context& context, const N64Rec
             end_address = stats.jump_tables[i + 1].vram;
         }
 
-        // TODO this assumes that the jump table is in the same section as the function itself
-        cur_jtbl.rom = cur_jtbl.vram + func.rom - func.vram;
+        // The jump table is read at the function's ROM offset, as if it were in the function's own section, unless
+        // another section loaded beside it holds its address: GoldenEye keeps every jump table in a .rodata section of
+        // its own. A section overlapping the function's in memory is an overlay that is never loaded with it (Rush 2049's
+        // two overlays share their addresses, and a table just past the end of one lies inside the other).
         cur_jtbl.section_index = func.section_index;
+        uint32_t jtbl_rom_offset = func.rom - func.vram;
+        const N64Recomp::Section& func_section = context.sections[func.section_index];
+        if (cur_jtbl.vram < func_section.ram_addr || cur_jtbl.vram >= func_section.ram_addr + func_section.size) {
+            for (size_t section_index = 0; section_index < context.sections.size(); section_index++) {
+                const N64Recomp::Section& section = context.sections[section_index];
+                bool overlaps_func_section = section.ram_addr < func_section.ram_addr + func_section.size &&
+                    func_section.ram_addr < section.ram_addr + section.size;
+                if (!overlaps_func_section && cur_jtbl.vram >= section.ram_addr && cur_jtbl.vram < section.ram_addr + section.size) {
+                    cur_jtbl.section_index = static_cast<uint16_t>(section_index);
+                    jtbl_rom_offset = section.rom_addr - section.ram_addr;
+                    break;
+                }
+            }
+        }
+        cur_jtbl.rom = cur_jtbl.vram + jtbl_rom_offset;
 
         while (vram < end_address) {
             // Retrieve the current entry of the jump table
-            // TODO same as above
-            uint32_t rom_addr = vram + func.rom - func.vram;
+            uint32_t rom_addr = vram + jtbl_rom_offset;
+            if (rom_addr + sizeof(uint32_t) > context.rom.size()) {
+                break;
+            }
             uint32_t jtbl_word = byteswap(*reinterpret_cast<const uint32_t*>(&context.rom[rom_addr]));
 
             if (cur_jtbl.got_offset.has_value() && got_ram_addr.has_value()) {
