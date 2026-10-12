@@ -548,6 +548,18 @@ static inline uintptr_t recomp_table_index(uintptr_t func) {
 #define RECOMP_FUNC_ENTRY(func)
 #endif
 
+// What comes before a tail call, a call to another function as this one's last act (a MIPS j or jr out of it), which
+// the recompiled C writes as the call and a return. Natively the optimizer turns that into a jump. In WebAssembly it
+// stays a call, so a game whose code chains tail calls without end overflows the browser's stack (Conker's Bad Fur
+// Day after minutes of play), unless it is a return_call: with the tail call feature (-mtail-call, which every
+// browser with WebGPU has) this forces one. Without it the call stays a plain one. The empty statement keeps the
+// attribute off a label just before it, which would take it as its own.
+#if defined(__wasm_tail_call__)
+#define RECOMP_TAIL_CALL ; __attribute__((musttail)) return
+#else
+#define RECOMP_TAIL_CALL
+#endif
+
 // A mod's code recompiled ahead of time into C (OfflineModRecomp --static) and linked into the executable, for a
 // platform without the live recompiler (WebAssembly). The runtime uses it, through the pointers here, for a mod whose
 // mod_binary.bin and mod_syms.bin hash to `hash` (N64Recomp::mod_code_hash), in place of recompiling the mod.

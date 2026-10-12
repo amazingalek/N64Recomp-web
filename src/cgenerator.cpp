@@ -439,6 +439,14 @@ void N64Recomp::CGenerator::emit_named_function_call(const std::string& function
     fmt::print(output_file, "{}(rdram, ctx);\n", function_name);
 }
 
+void N64Recomp::CGenerator::emit_tail_call_start(const Context& context) const {
+    // recomp.h makes it a forced tail call where that matters (WebAssembly), and nothing elsewhere. Trace mode's
+    // TRACE_RETURN after the call has to run, so it keeps the plain call.
+    if (!context.trace_mode) {
+        fmt::print(output_file, "RECOMP_TAIL_CALL ");
+    }
+}
+
 void N64Recomp::CGenerator::emit_goto(const std::string& target) const {
     fmt::print(output_file,
         "    goto {};\n", target);

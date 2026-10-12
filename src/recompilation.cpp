@@ -249,11 +249,14 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
         return true;
     };
 
-    auto print_func_call_by_register = [&](int reg) {
+    auto print_func_call_by_register = [&](int reg, bool tail_call = false) {
         if (!process_delay_slot(false)) {
             return false;
         }
         print_indent();
+        if (tail_call) {
+            generator.emit_tail_call_start(context);
+        }
         generator.emit_function_call_by_register(reg);
         print_link_branch();
         return true;
@@ -339,6 +342,9 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
                 return false;
             }
             print_indent();
+            if (tail_call) {
+                generator.emit_tail_call_start(context);
+            }
             if (reloc_reference_symbol != (size_t)-1) {
                 generator.emit_function_call_reference_symbol(context, reloc_section, reloc_reference_symbol, reloc_target_section_offset);
             }
@@ -554,7 +560,7 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
             }
 
             fmt::print("[Info] Indirect tail call in {}\n", func.name);
-            print_func_call_by_register(rs);
+            print_func_call_by_register(rs, true);
             print_indent();
             generator.emit_return(context, func_index);
             break;

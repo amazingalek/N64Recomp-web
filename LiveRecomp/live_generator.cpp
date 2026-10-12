@@ -1436,6 +1436,10 @@ void N64Recomp::LiveGenerator::emit_function_call(const Context&, size_t functio
     context->inner_calls.emplace_back(InnerCall{ .target_func_index = function_index, .jump = call_jump });
 }
 
+void N64Recomp::LiveGenerator::emit_tail_call_start(const Context& context) const {
+    (void)context;
+}
+
 void N64Recomp::LiveGenerator::emit_named_function_call(const std::string& function_name) const {
     // The live recompiler can't call functions by name. This is only used for statics, so it's not an issue.
     assert(false);
