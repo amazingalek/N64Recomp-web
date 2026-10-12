@@ -520,9 +520,15 @@ int main(int argc, char** argv) {
 
     // Rename any functions specified in the config file.
     for (const std::string& renamed_func : config.renamed_funcs) {
+        // A patch's call to a base game function that the config renames (GoldenEye's strtol, which clashes with the C
+        // library's) goes through its reference symbol, so that is renamed too, keeping the name it is looked up by.
+        bool renamed_reference = context.rename_reference_function(renamed_func, renamed_func + "_recomp");
         // Check if the specified function exists.
         auto func_find = context.functions_by_name.find(renamed_func);
         if (func_find == context.functions_by_name.end()) {
+            if (renamed_reference) {
+                continue;
+            }
             // Function doesn't exist, present an error to the user instead of silently failing to rename it.
             // This helps prevent typos in the config file or functions renamed between versions from causing issues.
             exit_failure(fmt::format("Function {} is set as renamed in the config file but does not exist!", renamed_func));

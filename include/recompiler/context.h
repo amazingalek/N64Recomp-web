@@ -395,6 +395,16 @@ namespace N64Recomp {
             return true;
         }
 
+        // Gives a function's reference symbol a new name to call it by, keeping the name it is found by.
+        bool rename_reference_function(const std::string& symbol_name, const std::string& new_name) {
+            SymbolReference ref;
+            if (!find_regular_reference_symbol(symbol_name, ref) || !reference_symbols[ref.symbol_index].is_function) {
+                return false;
+            }
+            reference_symbols[ref.symbol_index].name = new_name;
+            return true;
+        }
+
         const ReferenceSymbol& get_reference_symbol(uint16_t section_index, size_t symbol_index) const {
             if (section_index == SectionImport) {
                 return import_symbols[symbol_index].base;
