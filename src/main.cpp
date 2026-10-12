@@ -1085,7 +1085,8 @@ int main(int argc, char** argv) {
             declare_function(name);
         }
     }
-    if (!context.event_symbols.empty()) {
+    // Events come from a mod's event symbols, or from the patches' own declared events (function_index_to_event_index).
+    if (!context.event_symbols.empty() || !function_index_to_event_index.empty()) {
         fmt::print(func_header_file, "void recomp_trigger_event(uint8_t* rdram, recomp_context* ctx, uint32_t event_index);\n");
     }
 
