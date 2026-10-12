@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <filesystem>
@@ -239,6 +240,10 @@ namespace N64Recomp {
         //// Only used by the CLI, TODO move this to a struct in the internal headers.
         // A mapping of function name to index in the functions vector
         std::unordered_map<std::string, size_t> functions_by_name;
+        // Every function the C output calls by name (CGenerator records them), so that funcs.h can declare the ones it
+        // doesn't define: the runtime's replacements and ignored functions. Without a declaration C guesses `int f()`,
+        // which x86-64 tolerates and WebAssembly turns into a trap when it links.
+        mutable std::set<std::string> called_functions;
 
         //// Mod dependencies and their symbols
         

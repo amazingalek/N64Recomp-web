@@ -124,6 +124,7 @@ bool recompile_single_function(const N64Recomp::Context& context, size_t func_in
     // Write the file header
     fmt::print(output_file,
         "{}\n"
+        "#include \"funcs.h\"\n"
         "\n",
         recomp_include);
 
@@ -480,6 +481,13 @@ int main(int argc, char** argv) {
         config.recomp_include
     );
 
+    // What funcs.h has declared, so that its end can declare what the output calls but doesn't define.
+    std::unordered_set<std::string> declared_funcs{};
+    auto declare_function = [&func_header_file, &declared_funcs](const std::string& name) {
+        fmt::print(func_header_file, "void {}(uint8_t* rdram, recomp_context* ctx);\n", name);
+        declared_funcs.insert(name);
+    };
+
     std::vector<std::vector<uint32_t>> static_funcs_by_section{ context.sections.size() };
 
     fmt::print("Working dir: {}\n", std::filesystem::current_path().string());
@@ -713,8 +721,7 @@ int main(int argc, char** argv) {
         const auto& func = context.functions[i];
 
         if (!func.ignored && func.words.size() != 0) {
-            fmt::print(func_header_file,
-                "void {}(uint8_t* rdram, recomp_context* ctx);\n", func.name);
+            declare_function(func.name);
             bool result;
             const auto& func_section = context.sections[func.section_index];
             // Apply strict patch mode validation if enabled.
@@ -761,8 +768,7 @@ int main(int argc, char** argv) {
                 std::exit(EXIT_FAILURE);
             }
         } else if (func.reimplemented) {
-            fmt::print(func_header_file,
-                       "void {}(uint8_t* rdram, recomp_context* ctx);\n", func.name);
+            declare_function(func.name);
         }
     }
 
@@ -829,8 +835,7 @@ int main(int argc, char** argv) {
             );
             const N64Recomp::Function& new_func = context.functions[new_func_index];
 
-            fmt::print(func_header_file,
-                       "void {}(uint8_t* rdram, recomp_context* ctx);\n", new_func.name);
+            declare_function(new_func.name);
 
             bool result;
             size_t prev_num_statics = static_funcs_by_section[new_func.section_index].size();
@@ -1064,13 +1069,24 @@ int main(int argc, char** argv) {
             for (const auto& manual_patch_sym_entry : manual_patch_syms) {
                 fmt::print(overlay_file, "    {{ 0x{:08X}, {} }},\n", manual_patch_sym_entry.first, manual_patch_sym_entry.second);
 
-                fmt::print(func_header_file,
-                    "void {}(uint8_t* rdram, recomp_context* ctx);\n", manual_patch_sym_entry.second);
+                declare_function(manual_patch_sym_entry.second);
             }
             // Add a dummy element at the end to ensure the array has a valid length because C doesn't allow zero-size arrays.
             fmt::print(overlay_file, "    {{ 0, NULL }}\n");
             fmt::print(overlay_file, "}};\n");
         }
+    }
+
+    // Declare what the output calls but doesn't define: the runtime's replacements of libultra functions, ignored
+    // functions, reference symbols and the event trigger. C lets such a call go undeclared and guesses `int f()`, which
+    // x86-64 tolerates and WebAssembly links to a trap.
+    for (const std::string& name : context.called_functions) {
+        if (!declared_funcs.contains(name)) {
+            declare_function(name);
+        }
+    }
+    if (!context.event_symbols.empty()) {
+        fmt::print(func_header_file, "void recomp_trigger_event(uint8_t* rdram, recomp_context* ctx, uint32_t event_index);\n");
     }
 
     fmt::print(func_header_file,

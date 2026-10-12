@@ -417,10 +417,12 @@ void N64Recomp::CGenerator::emit_function_call_by_register(int reg) const {
 void N64Recomp::CGenerator::emit_function_call_reference_symbol(const Context& context, uint16_t section_index, size_t symbol_index, uint32_t target_section_offset) const {
     (void)target_section_offset;
     const N64Recomp::ReferenceSymbol& sym = context.get_reference_symbol(section_index, symbol_index);
+    context.called_functions.insert(sym.name);
     fmt::print(output_file, "{}(rdram, ctx);\n", sym.name);
 }
 
 void N64Recomp::CGenerator::emit_function_call(const Context& context, size_t function_index) const {
+    context.called_functions.insert(context.functions[function_index].name);
     fmt::print(output_file, "{}(rdram, ctx);\n", context.functions[function_index].name);
 }
 
