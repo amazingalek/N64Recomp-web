@@ -85,6 +85,16 @@ static std::string gpr_to_string(int gpr_index) {
     return fmt::format("ctx->r{}", gpr_index);
 }
 
+// An assignment of a value to an op's output. With $zero (gpr_to_string's "0") as the output it is the value alone, cast
+// to void: the op is still done, since a load can fault and a load from a device register has side effects, and its
+// result thrown away. "0 = MEM_W(...)" is not C.
+static std::string assignment(const std::string& output, const std::string& value) {
+    if (output == "0") {
+        return fmt::format("(void)({});", value);
+    }
+    return fmt::format("{} = {};", output, value);
+}
+
 static std::string fpr_to_string(int fpr_index) {
     return fmt::format("ctx->f{}.fl", fpr_index);
 }
@@ -513,7 +523,7 @@ void N64Recomp::CGenerator::emit_check_nan(int fpr, bool is_double) const {
 }
 
 void N64Recomp::CGenerator::emit_cop0_status_read(int reg) const {
-    fmt::print(output_file, "{} = cop0_status_read(ctx);\n", gpr_to_string(reg));
+    fmt::print(output_file, "{}\n", assignment(gpr_to_string(reg), "cop0_status_read(ctx)"));
 }
 
 void N64Recomp::CGenerator::emit_cop0_status_write(int reg) const {
@@ -521,7 +531,7 @@ void N64Recomp::CGenerator::emit_cop0_status_write(int reg) const {
 }
 
 void N64Recomp::CGenerator::emit_cop1_cs_read(int reg) const {
-    fmt::print(output_file, "{} = get_cop1_cs();\n", gpr_to_string(reg));
+    fmt::print(output_file, "{}\n", assignment(gpr_to_string(reg), "get_cop1_cs()"));
 }
 
 void N64Recomp::CGenerator::emit_cop1_cs_write(int reg) const {
@@ -588,7 +598,7 @@ void N64Recomp::CGenerator::process_binary_op(const BinaryOp& op, const Instruct
     thread_local std::string expression{};
     get_operand_string(op.output, UnaryOpType::None, ctx, output);
     get_binary_expr_string(op.type, op.operands, ctx, output, expression);
-    fmt::print(output_file, "{} = {};\n", output, expression);
+    fmt::print(output_file, "{}\n", assignment(output, expression));
 }
 
 void N64Recomp::CGenerator::process_unary_op(const UnaryOp& op, const InstructionContext& ctx) const {
@@ -598,7 +608,7 @@ void N64Recomp::CGenerator::process_unary_op(const UnaryOp& op, const Instructio
     thread_local std::string input{};
     get_operand_string(op.output, UnaryOpType::None, ctx, output);
     get_operand_string(op.input, op.operation, ctx, input);
-    fmt::print(output_file, "{} = {};\n", output, input);
+    fmt::print(output_file, "{}\n", assignment(output, input));
 }
 
 void N64Recomp::CGenerator::process_store_op(const StoreOp& op, const InstructionContext& ctx) const {
