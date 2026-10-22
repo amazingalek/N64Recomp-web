@@ -538,6 +538,9 @@ void N64Recomp::CGenerator::emit_cop1_cs_write(int reg) const {
     fmt::print(output_file, "set_cop1_cs({});\n", gpr_to_string(reg));
 }
 
+// A division by zero doesn't trap on the VR4300: the quotient is -1 (1 for a signed division of a negative dividend)
+// and the remainder is the dividend. Code that divides without checking its divisor gets those, so the divisions are
+// written to give them, where dividing by zero on the host would trap (in wasm, and on x86 natively).
 void N64Recomp::CGenerator::emit_muldiv(InstrId instr_id, int reg1, int reg2) const {
     switch (instr_id) {
         case InstrId::cpu_mult:
@@ -554,16 +557,16 @@ void N64Recomp::CGenerator::emit_muldiv(InstrId instr_id, int reg1, int reg2) co
             break;
         case InstrId::cpu_div:
             // Cast to 64-bits before division to prevent artihmetic exception for s32(0x80000000) / -1
-            fmt::print(output_file, "lo = S32(S64(S32({0})) / S64(S32({1}))); hi = S32(S64(S32({0})) % S64(S32({1})));\n", gpr_to_string(reg1), gpr_to_string(reg2));
+            fmt::print(output_file, "if (S32({1}) == 0) {{ lo = S32({0}) >= 0 ? -1 : 1; hi = S32({0}); }} else {{ lo = S32(S64(S32({0})) / S64(S32({1}))); hi = S32(S64(S32({0})) % S64(S32({1}))); }}\n", gpr_to_string(reg1), gpr_to_string(reg2));
             break;
         case InstrId::cpu_ddiv:
-            fmt::print(output_file, "DDIV(S64({}), S64({}), &lo, &hi);\n", gpr_to_string(reg1), gpr_to_string(reg2));
+            fmt::print(output_file, "if (S64({1}) == 0) {{ lo = S64({0}) >= 0 ? -1 : 1; hi = {0}; }} else DDIV(S64({0}), S64({1}), &lo, &hi);\n", gpr_to_string(reg1), gpr_to_string(reg2));
             break;
         case InstrId::cpu_divu:
-            fmt::print(output_file, "lo = S32(U32({0}) / U32({1})); hi = S32(U32({0}) % U32({1}));\n", gpr_to_string(reg1), gpr_to_string(reg2));
+            fmt::print(output_file, "if (U32({1}) == 0) {{ lo = S32(0xFFFFFFFF); hi = S32({0}); }} else {{ lo = S32(U32({0}) / U32({1})); hi = S32(U32({0}) % U32({1})); }}\n", gpr_to_string(reg1), gpr_to_string(reg2));
             break;
         case InstrId::cpu_ddivu:
-            fmt::print(output_file, "DDIVU(U64({}), U64({}), &lo, &hi);\n", gpr_to_string(reg1), gpr_to_string(reg2));
+            fmt::print(output_file, "if (U64({1}) == 0) {{ lo = -1; hi = {0}; }} else DDIVU(U64({0}), U64({1}), &lo, &hi);\n", gpr_to_string(reg1), gpr_to_string(reg2));
             break;
         default:
             assert(false);
