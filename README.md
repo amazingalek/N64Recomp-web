@@ -1,9 +1,9 @@
 # N64: Recompiled
 
 > [!WARNING]
-> **This is amazingalek/N64Recomp-web, a fork, not [N64: Recompiled](https://github.com/N64Recomp/N64Recomp).** It
+> **This is n64hub/N64Recomp-web, a fork, not [N64: Recompiled](https://github.com/N64Recomp/N64Recomp).** It
 > changes the recompiler's output so that the C it generates builds and runs as WebAssembly, for
-> [N64Recomp-browser](https://github.com/amazingalek/N64Recomp-browser), and everything in it past upstream's commits was written by
+> [N64Recomp-browser](https://github.com/n64hub/N64Recomp-browser), and everything in it past upstream's commits was written by
 > AI (Claude). It is not made, endorsed or supported by the N64: Recompiled developers, whose contributing guide bans
 > AI-written code: nothing here is offered upstream, and please don't take issues with this fork to them.
 
